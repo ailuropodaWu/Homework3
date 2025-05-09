@@ -69,7 +69,39 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        for i in range(len(self.price)):
+            if i < self.lookback:
+                # Not enough data yet
+                self.portfolio_weights.iloc[i] = np.nan
+                continue
 
+            # Rolling window
+            window_prices = self.price.iloc[i - self.lookback:i]
+            window_returns = window_prices.pct_change().dropna()
+
+            mu = window_returns[assets].mean().values  # Expected returns
+            Sigma = window_returns[assets].cov().values  # Covariance matrix
+            n = len(assets)
+
+            # Gurobi optimization
+            model = gp.Model()
+            model.setParam('OutputFlag', 0)  # Silent mode
+
+            w = model.addMVar(n, lb=0, ub=1, name="weights")  # No shorting
+            model.addConstr(w.sum() == 1)  # Fully invested
+
+            mean_return = mu @ w
+            risk_penalty = self.gamma * (w @ Sigma @ w)
+            model.setObjective(mean_return - risk_penalty, gp.GRB.MAXIMIZE)
+
+            model.optimize()
+
+            if model.status == gp.GRB.OPTIMAL:
+                optimal_weights = w.X
+                self.portfolio_weights.loc[self.price.index[i], assets] = optimal_weights
+            else:
+                # fallback: equally weighted
+                self.portfolio_weights.loc[self.price.index[i], assets] = 1.0 / n
         """
         TODO: Complete Task 4 Above
         """
