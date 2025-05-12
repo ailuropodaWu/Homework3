@@ -50,13 +50,12 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=50, gamma=0, confidence_level=0.95):
+    def __init__(self, price, exclude, lookback=50, gamma=0):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
         self.lookback = lookback
         self.gamma = gamma
-        self.confidence_level = confidence_level
 
     def calculate_weights(self):
         # Get the assets by excluding the specified column
@@ -70,6 +69,28 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        n = len(assets)
+        lookback_returns = self.returns[assets].rolling(window=self.lookback)
+        exp_returns = lookback_returns.mean()
+        cov_matrix = lookback_returns.cov()
+
+        for t in range(self.lookback, len(self.price)):
+            curr_returns = exp_returns.iloc[t]
+            curr_cov = cov_matrix.iloc[t * n:(t+1) * n]
+            model = gp.Model('portfolio_opt')
+            model.setParam('OutputFlag', 0)
+            w = model.addVars(n, lb=0, ub=1, name="weights")
+            model.addConstr(gp.quicksum(w[i] for i in range(n)) <= 1)
+
+            
+            port_return = gp.quicksum(curr_returns[i] * w[i] for i in range(n))
+            port_risk = gp.quicksum(gp.quicksum(w[i] * curr_cov.iloc[i,j] * w[j] 
+                        for j in range(n)) for i in range(n))
+            model.setObjective(port_return - self.gamma * port_risk, gp.GRB.MAXIMIZE)
+            model.optimize()
+            if model.status == gp.GRB.OPTIMAL:
+                weights = [w[i].x for i in range(n)]
+                self.portfolio_weights.iloc[t, self.portfolio_weights.columns != self.exclude] = weights
         """
         TODO: Complete Task 4 Above
         """
